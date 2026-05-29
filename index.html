@@ -92,8 +92,10 @@
         <div id="result" class="mt-4" style="display: none;"></div>
     </div>
 
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.3/dist/xlsx.full.min.js"></script>
     <script>
+        console.log('SheetJS loaded:', typeof XLSX !== 'undefined' ? 'Yes' : 'No');
+        
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const progress = document.getElementById('progress');
@@ -133,6 +135,12 @@
                 return;
             }
 
+            // Check if XLSX is loaded
+            if (typeof XLSX === 'undefined') {
+                showResult('error', '❌ SheetJS 库未加载，请检查网络连接后刷新页面');
+                return;
+            }
+
             // Show progress
             uploadArea.style.display = 'none';
             progress.style.display = 'block';
@@ -166,16 +174,22 @@
                         `✅ 处理完成！<br><br>` +
                         `原始数据: ${processed.totalRows} 条<br>` +
                         `去重后: ${processed.uniqueCustomers} 个客户<br><br>` +
-                        `文件已保存到下载文件夹: <strong>${processed.fileName}</strong>`
+                        `文件已保存: <strong>${processed.fileName}</strong>`
                     );
                     
                 } catch (error) {
+                    console.error('Processing error:', error);
                     showResult('error', `❌ 处理失败: ${error.message}`);
                 } finally {
                     progress.style.display = 'none';
                     uploadArea.style.display = 'block';
                     fileInput.value = '';
                 }
+            };
+            reader.onerror = function() {
+                showResult('error', '❌ 文件读取失败');
+                progress.style.display = 'none';
+                uploadArea.style.display = 'block';
             };
             reader.readAsArrayBuffer(file);
         }
@@ -269,7 +283,7 @@
             ws[XLSX.utils.encode_cell({ r: totalRow - 1, c: 0 })] = { v: '合计', t: 's' };
             ws['!merges'].push(XLSX.utils.decode_range(`A${totalRow}:E${totalRow}`));
             
-            // Set row heights (approximate, SheetJS doesn't support exact heights)
+            // Set row heights
             ws['!rows'] = [];
             for (let i = 0; i < totalRow; i++) {
                 ws['!rows'][i] = { hpt: 20 };
