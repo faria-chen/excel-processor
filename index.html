@@ -129,15 +129,16 @@
                 }
             }
 
-            // 排序：经手人（索引4）→ 无电话排后面 → 客户名称
+            // 排序：经手人（索引4）→ 无电话排前面（有电话排末尾） → 客户名称
             const phoneRegex = /\d{8,}/;
             deduped.sort((a, b) => {
                 const hA = (a[4] || '').toString();
                 const hB = (b[4] || '').toString();
                 if (hA !== hB) return hA.localeCompare(hB, 'zh-CN');
 
-                const hasPhoneA = phoneRegex.test((a[2] || '').toString()) ? 0 : 1;
-                const hasPhoneB = phoneRegex.test((b[2] || '').toString()) ? 0 : 1;
+                // 有电话号码的排在该经手人组末尾
+                const hasPhoneA = phoneRegex.test((a[2] || '').toString()) ? 1 : 0;
+                const hasPhoneB = phoneRegex.test((b[2] || '').toString()) ? 1 : 0;
                 if (hasPhoneA !== hasPhoneB) return hasPhoneA - hasPhoneB;
 
                 return (a[2] || '').toString().localeCompare((b[2] || '').toString(), 'zh-CN');
