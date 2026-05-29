@@ -194,11 +194,15 @@
             ws[XLSX.utils.encode_cell({ r: totalRow, c: 0 })] = { v: '合计', t: 's' };
             ws['!merges'].push(XLSX.utils.decode_range('A' + (totalRow + 1) + ':E' + (totalRow + 1)));
 
-            // 行高
+            // 行高 20
             ws['!rows'] = [];
             for (let i = 0; i <= totalRow; i++) {
                 ws['!rows'][i] = { hpt: 20 };
             }
+
+            // 设置工作表范围（必须设置，否则Excel空白）
+            const ref = XLSX.utils.encode_range({s:{c:0,r:0},e:{c:4,r:totalRow}});
+            ws['!ref'] = ref;
 
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
             return wb;
