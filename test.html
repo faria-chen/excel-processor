@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试 - Excel 处理工具</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>🧪 测试页面</h1>
+        <p>检查 SheetJS 是否加载成功</p>
+        
+        <div class="mb-3">
+            <button class="btn btn-primary" onclick="testSheetJS()">测试 SheetJS</button>
+            <button class="btn btn-success" onclick="testProcess()">测试处理Excel</button>
+        </div>
+        
+        <div id="result" class="alert" style="display:none;"></div>
+        
+        <hr>
+        
+        <div>
+            <h3>上传测试文件</h3>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" class="form-control">
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.3/dist/xlsx.full.min.js"></script>
+    <script>
+        function showResult(type, message) {
+            const result = document.getElementById('result');
+            result.className = `alert alert-${type === 'success' ? 'success' : 'danger'}`;
+            result.innerHTML = message;
+            result.style.display = 'block';
+        }
+
+        function testSheetJS() {
+            if (typeof XLSX !== 'undefined') {
+                showResult('success', '✅ SheetJS 加载成功！<br>XLSX 版本: ' + XLSX.version);
+            } else {
+                showResult('error', '❌ SheetJS 加载失败！请检查网络连接');
+            }
+        }
+
+        function testProcess() {
+            if (typeof XLSX === 'undefined') {
+                showResult('error', '❌ SheetJS 未加载');
+                return;
+            }
+
+            // 创建测试数据
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet([
+                ['待收款'],
+                ['客户: 测试客户'],
+                ['行号', '单据日期', '客户名称', '收款期限', '经手人'],
+                [1, '2026-01-01', '客户A', '2026-02-01', '张三'],
+                [2, '2026-01-02', '客户B', '2026-02-02', '李四'],
+                [3, '2026-01-03', '客户A', '2026-02-03', '王五']
+            ]);
+
+            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            XLSX.writeFile(wb, '测试输出.xlsx');
+            
+            showResult('success', '✅ 测试文件生成成功！请检查下载文件夹');
+        }
+
+        // 实际文件处理测试
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    showResult('success', 
+                        `✅ 文件读取成功！<br><br>` +
+                        `工作表: ${sheetName}<br>` +
+                        `总行数: ${jsonData.length}<br><br>` +
+                        `前3行数据:<br>` +
+                        `<pre>${JSON.stringify(jsonData.slice(0, 3), null, 2)}</pre>`
+                    );
+                } catch (error) {
+                    showResult('error', `❌ 处理失败: ${error.message}`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    </script>
+</body>
+</html>
