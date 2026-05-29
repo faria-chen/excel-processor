@@ -34,65 +34,181 @@
         </div>
         <div id="result" class="mt-4" style="display: none;"></div>
     </div>
+
     <script src="xlsx.full.min.js"></script>
     <script>
-        const uploadArea=document.getElementById('uploadArea'),fileInput=document.getElementById('fileInput'),progress=document.getElementById('progress'),progressText=document.getElementById('progressText'),result=document.getElementById('result');
-        uploadArea.addEventListener('click',()=>fileInput.click());
-        uploadArea.addEventListener('dragover',e=>{e.preventDefault();uploadArea.classList.add('dragover')});
-        uploadArea.addEventListener('dragleave',()=>uploadArea.classList.remove('dragover'));
-        uploadArea.addEventListener('drop',e=>{e.preventDefault();uploadArea.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f)handleFile(f)});
-        fileInput.addEventListener('change',e=>{const f=e.target.files[0];if(f)handleFile(f)});
-        function handleFile(file){
-            if(!file.name.match(/\.(xlsx|xls)$/)){showResult('error','❌ 请上传 Excel 文件 (.xlsx 或 .xls)');return}
-            if(typeof XLSX==='undefined'){showResult('error','❌ SheetJS 库未加载');return}
-            uploadArea.style.display='none';progress.style.display='block';result.style.display='none';
-            const reader=new FileReader();
-            reader.onload=function(e){
-                try{
-                    const data=new Uint8Array(e.target.result);
-                    const wb=XLSX.read(data,{type:'array'});
-                    const sn=wb.SheetNames[0];
-                    const ws=wb.Sheets[sn];
-                    const jsonData=XLSX.utils.sheet_to_json(ws,{header:1});
-                    progressText.textContent='去重排序中...';
-                    const processed=processData(jsonData);
-                    progressText.textContent='生成文件中...';
-                    const newWb=createWorkbook(processed,sn);
-                    XLSX.writeFile(newWb,processed.fileName);
-                    showResult('success','✅ 处理完成！<br><br>原始数据: '+processed.totalRows+' 条<br>去重后: '+processed.uniqueCustomers+' 个客户<br><br>文件已保存: <strong>'+processed.fileName+'</strong>');
-                }catch(err){console.error(err);showResult('error','❌ 处理失败: '+err.message)}
-                finally{progress.style.display='none';uploadArea.style.display='block';fileInput.value=''}
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const progress = document.getElementById('progress');
+        const progressText = document.getElementById('progressText');
+        const result = document.getElementById('result');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', e => {
+            if (e.target.files[0]) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                showResult('error', '❌ 请上传 Excel 文件 (.xlsx 或 .xls)');
+                return;
+            }
+            if (typeof XLSX === 'undefined') {
+                showResult('error', '❌ SheetJS 库未加载，请刷新页面');
+                return;
+            }
+
+            uploadArea.style.display = 'none';
+            progress.style.display = 'block';
+            result.style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const wb = XLSX.read(data, { type: 'array' });
+                    const sn = wb.SheetNames[0];
+                    const ws = wb.Sheets[sn];
+                    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+                    progressText.textContent = '去重排序中...';
+                    const processed = processData(jsonData);
+                    progressText.textContent = '生成文件中...';
+
+                    const outWb = createWorkbook(processed, sn);
+                    XLSX.writeFile(outWb, processed.fileName);
+
+                    showResult('success',
+                        '✅ 处理完成！<br><br>' +
+                        '原始数据: ' + processed.totalRows + ' 条<br>' +
+                        '去重后: ' + processed.uniqueCustomers + ' 个客户<br><br>' +
+                        '文件已保存: <strong>' + processed.fileName + '</strong>'
+                    );
+                } catch (err) {
+                    console.error(err);
+                    showResult('error', '❌ 处理失败: ' + err.message);
+                } finally {
+                    progress.style.display = 'none';
+                    uploadArea.style.display = 'block';
+                    fileInput.value = '';
+                }
             };
-            reader.readAsArrayBuffer(file)
+            reader.onerror = function() {
+                showResult('error', '❌ 文件读取失败');
+                progress.style.display = 'none';
+                uploadArea.style.display = 'block';
+            };
+            reader.readAsArrayBuffer(file);
         }
-        function processData(jsonData){
-            const dataRows=[];
-            for(let i=3;i<jsonData.length;i++){const r=jsonData[i];if(r&&r[0]&&r[0]!=='合计')dataRows.push(r)}
-            const seen=new Set(),deduped=[];
-            for(const r of dataRows){const c=r[2];if(c&&!seen.has(c)){seen.add(c);deduped.push(r)}}
-            const phoneRegex=/\d{8,}/;
-            deduped.sort((a,b)=>{
-                const hA=a[4]||'',hB=b[4]||'';
-                if(hA!==hB)return hA.localeCompare(hB,'zh-CN');
-                const pA=phoneRegex.test(a[2]||'')?1:0,pB=phoneRegex.test(b[2]||'')?1:0;
-                if(pA!==pB)return pA-pB;
-                return(a[2]||'').localeCompare(b[2]||'','zh-CN')
+
+        function processData(jsonData) {
+            // 从第4行开始读取数据（索引3）
+            const dataRows = [];
+            for (let i = 3; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (row && row[0] && String(row[0]).trim() !== '合计') {
+                    dataRows.push(row);
+                }
+            }
+
+            // 按客户名称去重（第3列，索引2）
+            const seen = new Set();
+            const deduped = [];
+            for (const row of dataRows) {
+                const cust = row[2];
+                if (cust && !seen.has(String(cust))) {
+                    seen.add(String(cust));
+                    deduped.push(row);
+                }
+            }
+
+            // 排序：经手人（索引4）→ 无电话排后面 → 客户名称
+            const phoneRegex = /\d{8,}/;
+            deduped.sort((a, b) => {
+                const hA = (a[4] || '').toString();
+                const hB = (b[4] || '').toString();
+                if (hA !== hB) return hA.localeCompare(hB, 'zh-CN');
+
+                const hasPhoneA = phoneRegex.test((a[2] || '').toString()) ? 0 : 1;
+                const hasPhoneB = phoneRegex.test((b[2] || '').toString()) ? 0 : 1;
+                if (hasPhoneA !== hasPhoneB) return hasPhoneA - hasPhoneB;
+
+                return (a[2] || '').toString().localeCompare((b[2] || '').toString(), 'zh-CN');
             });
-            return{data:deduped,totalRows:dataRows.length,uniqueCustomers:deduped.length,fileName:fileInput.files[0].name.replace(/\.xlsx$/i,'_去重排序.xlsx')}
+
+            return {
+                data: deduped,
+                totalRows: dataRows.length,
+                uniqueCustomers: deduped.length,
+                fileName: fileInput.files[0].name.replace(/\.xlsx$/i, '_去重排序.xlsx')
+            };
         }
-        function createWorkbook(processed,sheetName){
-            const wb=XLSX.utils.book_new(),ws={};
-            ws['!cols']=[{wch:8},{wch:14},{wch:45},{wch:14},{wch:10}];
-            ws['!merges']=[XLSX.utils.decode_range('A1:E1'),XLSX.utils.decode_range('A2:E2')];
-            ws['A1']={v:'待收款',t:'s'};ws['A2']={v:'客户:    ',t:'s'};
-            ['行号','单据日期','客户名称','收款期限','经手人'].forEach((h,i)=>{ws[XLSX.utils.encode_cell({r:2,c:i})]={v:h,t:'s'}});
-            processed.data.forEach((row,i)=>{const rn=i+4;ws[XLSX.utils.encode_cell({r:rn-1,c:0})]={v:i+1,t:'n'};ws[XLSX.utils.encode_cell({r:rn-1,c:1})]={v:row[1],t:'s'};ws[XLSX.utils.encode_cell({r:rn-1,c:2})]={v:row[2],t:'s'};ws[XLSX.utils.encode_cell({r:rn-1,c:3})]={v:row[3],t:'s'};ws[XLSX.utils.encode_cell({r:rn-1,c:4})]={v:row[4],t:'s'}});
-            const totalRow=processed.data.length+4;
-            ws[XLSX.utils.encode_cell({r:totalRow-1,c:0})]={v:'合计',t:'s'};
-            ws['!merges'].push(XLSX.utils.decode_range('A'+totalRow+':E'+totalRow));
-            XLSX.utils.book_append_sheet(wb,ws,sheetName);return wb
+
+        function createWorkbook(processed, sheetName) {
+            const wb = XLSX.utils.book_new();
+            const ws = {};
+
+            // 列宽
+            ws['!cols'] = [
+                { wch: 8 }, { wch: 14 }, { wch: 45 }, { wch: 14 }, { wch: 10 }
+            ];
+
+            // 合并单元格
+            ws['!merges'] = [
+                XLSX.utils.decode_range('A1:E1'),
+                XLSX.utils.decode_range('A2:E2')
+            ];
+
+            // 第1行：标题
+            ws['A1'] = { v: '待收款', t: 's' };
+
+            // 第2行：客户
+            ws['A2'] = { v: '客户：', t: 's' };
+
+            // 第3行：表头
+            const headers = ['行号', '单据日期', '客户名称', '收款期限', '经手人'];
+            for (let i = 0; i < headers.length; i++) {
+                const cellRef = XLSX.utils.encode_cell({ r: 2, c: i });
+                ws[cellRef] = { v: headers[i], t: 's' };
+            }
+
+            // 数据行（从第4行开始，r=3）
+            processed.data.forEach((row, idx) => {
+                const r = idx + 3; // Excel 行号 = idx + 4，0-indexed = idx + 3
+                ws[XLSX.utils.encode_cell({ r: r, c: 0 })] = { v: idx + 1, t: 'n' };
+                ws[XLSX.utils.encode_cell({ r: r, c: 1 })] = { v: row[1], t: 's' };
+                ws[XLSX.utils.encode_cell({ r: r, c: 2 })] = { v: row[2], t: 's' };
+                ws[XLSX.utils.encode_cell({ r: r, c: 3 })] = { v: row[3], t: 's' };
+                ws[XLSX.utils.encode_cell({ r: r, c: 4 })] = { v: row[4], t: 's' };
+            });
+
+            // 合计行
+            const totalRow = processed.data.length + 3; // 0-indexed
+            ws[XLSX.utils.encode_cell({ r: totalRow, c: 0 })] = { v: '合计', t: 's' };
+            ws['!merges'].push(XLSX.utils.decode_range('A' + (totalRow + 1) + ':E' + (totalRow + 1)));
+
+            // 行高
+            ws['!rows'] = [];
+            for (let i = 0; i <= totalRow; i++) {
+                ws['!rows'][i] = { hpt: 20 };
+            }
+
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            return wb;
         }
-        function showResult(type,msg){result.className='alert alert-'+(type==='success'?'success':'danger');result.innerHTML=msg;result.style.display='block'}
+
+        function showResult(type, msg) {
+            result.className = 'alert alert-' + (type === 'success' ? 'success' : 'danger');
+            result.innerHTML = msg;
+            result.style.display = 'block';
+        }
     </script>
 </body>
 </html>
